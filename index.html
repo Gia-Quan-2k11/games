@@ -28,7 +28,7 @@ left:15px;
 background:#222;
 padding:15px;
 border-radius:10px;
-width:200px;
+width:220px;
 }
 
 select,button{
@@ -40,11 +40,11 @@ margin-top:5px;
 #scoreBox{
 position:fixed;
 top:15px;
-right:20px;
-font-size:36px;
+right:25px;
+font-size:40px;
 font-weight:bold;
 color:#00ff00;
-text-shadow:0 0 10px #00ff00;
+text-shadow:0 0 12px #00ff00;
 }
 
 #countdown{
@@ -56,6 +56,11 @@ font-size:90px;
 font-weight:bold;
 }
 
+#bestScore{
+margin-top:10px;
+color:gold;
+}
+
 #history{
 margin-top:10px;
 font-size:14px;
@@ -63,10 +68,13 @@ max-height:200px;
 overflow-y:auto;
 }
 
-#bestScore{
-font-size:18px;
-margin-top:10px;
-color:gold;
+.light{
+background:#f5f5f5;
+color:black;
+}
+
+.light canvas{
+background:white;
 }
 
 </style>
@@ -96,28 +104,32 @@ color:gold;
 
 <button onclick="startGame()">Start</button>
 <button onclick="restartGame()">Restart</button>
+<button onclick="toggleMode()">Light / Dark</button>
 
 <div id="bestScore"></div>
-
 <div id="history"></div>
 
 </div>
 
 <div id="scoreBox">Score: 0</div>
-
 <div id="countdown"></div>
 
 <canvas id="game"></canvas>
 
 <script>
 
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
 
-const grid = 20;
+const grid=20;
+
+let snake,dx,dy,nextDx,nextDy;
+let food,bonusFood=null;
+
+let bonusExpire=0;
+let nextBonusSpawn=Date.now()+randomBonusDelay();
 
 let tilesX,tilesY;
-let snake,dx,dy,food;
 let score,speed;
 let running=false;
 
@@ -125,25 +137,27 @@ const panel=document.getElementById("panel");
 
 document.addEventListener("keydown",changeDirection);
 
-/* STORAGE */
+/* random delay for bonus */
 
-let scoreHistory = JSON.parse(localStorage.getItem("snake_scores")) || [];
+function randomBonusDelay(){
+return 5000+Math.random()*10000;
+}
+
+/* score history */
+
+let scoreHistory=JSON.parse(localStorage.getItem("snake_scores"))||[];
 
 function saveScore(newScore){
 
-const now = new Date();
+const now=new Date();
 
-const time =
-now.getFullYear()+"-"+
-String(now.getMonth()+1).padStart(2,'0')+"-"+
-String(now.getDate()).padStart(2,'0')+" "+
-String(now.getHours()).padStart(2,'0')+":"+
-String(now.getMinutes()).padStart(2,'0');
+const time=
+now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,'0')+"-"+String(now.getDate()).padStart(2,'0')+
+" "+String(now.getHours()).padStart(2,'0')+":"+String(now.getMinutes()).padStart(2,'0');
 
 scoreHistory.unshift({score:newScore,time:time});
 
-if(scoreHistory.length>10)
-scoreHistory.pop();
+if(scoreHistory.length>10) scoreHistory.pop();
 
 localStorage.setItem("snake_scores",JSON.stringify(scoreHistory));
 
@@ -151,23 +165,21 @@ localStorage.setItem("snake_scores",JSON.stringify(scoreHistory));
 
 function updateScoreList(){
 
-let historyDiv=document.getElementById("history");
-
-historyDiv.innerHTML="<b>Recent Scores</b><br>";
-
-scoreHistory.forEach(s=>{
-historyDiv.innerHTML += s.score+" — "+s.time+"<br>";
-});
+let history=document.getElementById("history");
+history.innerHTML="<b>Recent Scores</b><br>";
 
 let best=0;
 
 scoreHistory.forEach(s=>{
+history.innerHTML+=s.score+" — "+s.time+"<br>";
 if(s.score>best) best=s.score;
 });
 
 document.getElementById("bestScore").innerText="Best Score: "+best;
 
 }
+
+/* init */
 
 function init(){
 
@@ -178,8 +190,7 @@ canvas.width=Math.floor(window.innerWidth/grid)*grid;
 canvas.height=Math.floor(window.innerHeight/grid)*grid;
 tilesX=canvas.width/grid;
 tilesY=canvas.height/grid;
-}
-else{
+}else{
 let tiles=parseInt(area);
 canvas.width=tiles*grid;
 canvas.height=tiles*grid;
@@ -189,8 +200,8 @@ tilesY=tiles;
 
 snake=[{x:grid*5,y:grid*5}];
 
-dx=grid;
-dy=0;
+dx=grid; dy=0;
+nextDx=dx; nextDy=dy;
 
 spawnFood();
 
@@ -199,18 +210,46 @@ updateScore();
 
 }
 
+/* spawn normal food */
+
 function spawnFood(){
 
+do{
 food={
 x:Math.floor(Math.random()*tilesX)*grid,
 y:Math.floor(Math.random()*tilesY)*grid
 };
+}
+while(snake.some(p=>p.x===food.x&&p.y===food.y));
 
 }
+
+/* spawn bonus */
+
+function spawnBonus(){
+
+do{
+bonusFood={
+x:Math.floor(Math.random()*tilesX)*grid,
+y:Math.floor(Math.random()*tilesY)*grid
+};
+}
+while(
+snake.some(p=>p.x===bonusFood.x&&p.y===bonusFood.y)||
+(food.x===bonusFood.x&&food.y===bonusFood.y)
+);
+
+bonusExpire=Date.now()+5000;
+
+}
+
+/* score */
 
 function updateScore(){
 document.getElementById("scoreBox").innerText="Score: "+score;
 }
+
+/* start */
 
 function startGame(){
 
@@ -221,7 +260,7 @@ speed=parseInt(document.getElementById("speed").value);
 panel.style.display="none";
 
 let count=3;
-const c=document.getElementById("countdown");
+let c=document.getElementById("countdown");
 
 c.innerText=count;
 
@@ -229,12 +268,8 @@ const timer=setInterval(()=>{
 
 count--;
 
-if(count>0){
-c.innerText=count;
-}
-else if(count===0){
-c.innerText="GO";
-}
+if(count>0) c.innerText=count;
+else if(count===0) c.innerText="GO";
 else{
 clearInterval(timer);
 c.innerText="";
@@ -246,39 +281,39 @@ gameLoop();
 
 }
 
+/* restart */
+
 function restartGame(){
 
 running=false;
-
 panel.style.display="block";
-
 init();
-
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
 }
+
+/* controls */
 
 function changeDirection(e){
 
 let key=e.key.toLowerCase();
 
-if((key==="arrowleft"||key==="a") && dx===0){
-dx=-grid; dy=0;
+if((key==="arrowleft"||key==="a")&&dx!==grid){
+nextDx=-grid; nextDy=0;
 }
-
-else if((key==="arrowright"||key==="d") && dx===0){
-dx=grid; dy=0;
+else if((key==="arrowright"||key==="d")&&dx!==-grid){
+nextDx=grid; nextDy=0;
 }
-
-else if((key==="arrowup"||key==="w") && dy===0){
-dx=0; dy=-grid;
+else if((key==="arrowup"||key==="w")&&dy!==grid){
+nextDx=0; nextDy=-grid;
 }
-
-else if((key==="arrowdown"||key==="s") && dy===0){
-dx=0; dy=grid;
+else if((key==="arrowdown"||key==="s")&&dy!==-grid){
+nextDx=0; nextDy=grid;
 }
 
 }
+
+/* game loop */
 
 function gameLoop(){
 
@@ -286,41 +321,110 @@ if(!running) return;
 
 setTimeout(()=>{
 
+dx=nextDx;
+dy=nextDy;
+
 ctx.clearRect(0,0,canvas.width,canvas.height);
 
-const head={
-x:snake[0].x+dx,
-y:snake[0].y+dy
-};
+const head={x:snake[0].x+dx,y:snake[0].y+dy};
 
 snake.unshift(head);
 
-if(head.x===food.x && head.y===food.y){
+/* eat apple */
+
+if(head.x===food.x&&head.y===food.y){
 
 score++;
 updateScore();
-
 spawnFood();
 
 }else{
 snake.pop();
 }
 
+/* bonus logic */
+
+let now=Date.now();
+
+if(!bonusFood && now>nextBonusSpawn){
+spawnBonus();
+nextBonusSpawn=now+randomBonusDelay();
+}
+
+if(bonusFood && head.x===bonusFood.x && head.y===bonusFood.y){
+score+=5;
+updateScore();
+bonusFood=null;
+}
+
+if(bonusFood && now>bonusExpire){
+bonusFood=null;
+}
+
+/* draw apple */
+
 ctx.fillStyle="red";
 ctx.fillRect(food.x,food.y,grid,grid);
 
+/* draw bonus blinking */
+
+if(bonusFood && Math.floor(Date.now()/200)%2==0){
+ctx.fillStyle="gold";
+ctx.fillRect(bonusFood.x,bonusFood.y,grid,grid);
+}
+
+/* body */
+
 ctx.fillStyle="lime";
 
-snake.forEach(part=>{
-ctx.fillRect(part.x,part.y,grid-2,grid-2);
-});
+for(let i=1;i<snake.length;i++){
+let p=snake[i];
+ctx.fillRect(p.x,p.y,grid-2,grid-2);
+}
+
+/* head */
+
+let h=snake[0];
+
+ctx.fillStyle="#00ff00";
+ctx.fillRect(h.x,h.y,grid-2,grid-2);
+
+/* eyes */
+
+ctx.fillStyle="white";
+
+let ox=0,oy=0;
+
+if(dx>0) ox=4;
+if(dx<0) ox=-4;
+if(dy>0) oy=4;
+if(dy<0) oy=-4;
+
+ctx.beginPath();
+ctx.arc(h.x+6+ox,h.y+6+oy,3,0,Math.PI*2);
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(h.x+14+ox,h.y+6+oy,3,0,Math.PI*2);
+ctx.fill();
+
+ctx.fillStyle="black";
+
+ctx.beginPath();
+ctx.arc(h.x+6+ox,h.y+6+oy,1.5,0,Math.PI*2);
+ctx.fill();
+
+ctx.beginPath();
+ctx.arc(h.x+14+ox,h.y+6+oy,1.5,0,Math.PI*2);
+ctx.fill();
+
+/* collision */
 
 if(checkCollision(head)){
 
 running=false;
 
 saveScore(score);
-
 updateScoreList();
 
 panel.style.display="block";
@@ -328,6 +432,7 @@ panel.style.display="block";
 alert("Game Over! Score: "+score);
 
 return;
+
 }
 
 gameLoop();
@@ -336,18 +441,23 @@ gameLoop();
 
 }
 
+/* collision */
+
 function checkCollision(head){
 
-if(head.x<0 || head.x>=canvas.width || head.y<0 || head.y>=canvas.height)
+if(head.x<0||head.x>=canvas.width||head.y<0||head.y>=canvas.height)
 return true;
 
 for(let i=1;i<snake.length;i++){
-if(head.x===snake[i].x && head.y===snake[i].y)
-return true;
+if(head.x===snake[i].x&&head.y===snake[i].y) return true;
 }
 
 return false;
 
+}
+
+function toggleMode(){
+document.body.classList.toggle("light");
 }
 
 updateScoreList();
