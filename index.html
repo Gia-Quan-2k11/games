@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Snake Game</title>
+
+<style>
+
+body{
+margin:0;
+overflow:hidden;
+background:#111;
+font-family:Arial;
+color:white;
+}
+
+canvas{
+display:block;
+margin:auto;
+background:black;
+border:3px solid lime;
+}
+
+#panel{
+position:fixed;
+top:15px;
+left:15px;
+background:#222;
+padding:15px;
+border-radius:10px;
+width:200px;
+}
+
+select,button{
+width:100%;
+padding:6px;
+margin-top:5px;
+}
+
+#scoreBox{
+position:fixed;
+top:15px;
+right:20px;
+font-size:36px;
+font-weight:bold;
+color:#00ff00;
+text-shadow:0 0 10px #00ff00;
+}
+
+#countdown{
+position:fixed;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+font-size:90px;
+font-weight:bold;
+}
+
+#history{
+margin-top:10px;
+font-size:14px;
+max-height:200px;
+overflow-y:auto;
+}
+
+#bestScore{
+font-size:18px;
+margin-top:10px;
+color:gold;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="panel">
+
+<b>Snake Settings</b>
+
+<br>Speed
+<select id="speed">
+<option value="150">Slow</option>
+<option value="100" selected>Normal</option>
+<option value="60">Fast</option>
+</select>
+
+<br>Area
+<select id="area">
+<option value="15">Small</option>
+<option value="20" selected>Medium</option>
+<option value="25">Large</option>
+<option value="30">Huge</option>
+<option value="full">Full Screen</option>
+</select>
+
+<button onclick="startGame()">Start</button>
+<button onclick="restartGame()">Restart</button>
+
+<div id="bestScore"></div>
+
+<div id="history"></div>
+
+</div>
+
+<div id="scoreBox">Score: 0</div>
+
+<div id="countdown"></div>
+
+<canvas id="game"></canvas>
+
+<script>
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const grid = 20;
+
+let tilesX,tilesY;
+let snake,dx,dy,food;
+let score,speed;
+let running=false;
+
+const panel=document.getElementById("panel");
+
+document.addEventListener("keydown",changeDirection);
+
+/* STORAGE */
+
+let scoreHistory = JSON.parse(localStorage.getItem("snake_scores")) || [];
+
+function saveScore(newScore){
+
+const now = new Date();
+
+const time =
+now.getFullYear()+"-"+
+String(now.getMonth()+1).padStart(2,'0')+"-"+
+String(now.getDate()).padStart(2,'0')+" "+
+String(now.getHours()).padStart(2,'0')+":"+
+String(now.getMinutes()).padStart(2,'0');
+
+scoreHistory.unshift({score:newScore,time:time});
+
+if(scoreHistory.length>10)
+scoreHistory.pop();
+
+localStorage.setItem("snake_scores",JSON.stringify(scoreHistory));
+
+}
+
+function updateScoreList(){
+
+let historyDiv=document.getElementById("history");
+
+historyDiv.innerHTML="<b>Recent Scores</b><br>";
+
+scoreHistory.forEach(s=>{
+historyDiv.innerHTML += s.score+" — "+s.time+"<br>";
+});
+
+let best=0;
+
+scoreHistory.forEach(s=>{
+if(s.score>best) best=s.score;
+});
+
+document.getElementById("bestScore").innerText="Best Score: "+best;
+
+}
+
+function init(){
+
+let area=document.getElementById("area").value;
+
+if(area==="full"){
+canvas.width=Math.floor(window.innerWidth/grid)*grid;
+canvas.height=Math.floor(window.innerHeight/grid)*grid;
+tilesX=canvas.width/grid;
+tilesY=canvas.height/grid;
+}
+else{
+let tiles=parseInt(area);
+canvas.width=tiles*grid;
+canvas.height=tiles*grid;
+tilesX=tiles;
+tilesY=tiles;
+}
+
+snake=[{x:grid*5,y:grid*5}];
+
+dx=grid;
+dy=0;
+
+spawnFood();
+
+score=0;
+updateScore();
+
+}
+
+function spawnFood(){
+
+food={
+x:Math.floor(Math.random()*tilesX)*grid,
+y:Math.floor(Math.random()*tilesY)*grid
+};
+
+}
+
+function updateScore(){
+document.getElementById("scoreBox").innerText="Score: "+score;
+}
+
+function startGame(){
+
+if(running) return;
+
+speed=parseInt(document.getElementById("speed").value);
+
+panel.style.display="none";
+
+let count=3;
+const c=document.getElementById("countdown");
+
+c.innerText=count;
+
+const timer=setInterval(()=>{
+
+count--;
+
+if(count>0){
+c.innerText=count;
+}
+else if(count===0){
+c.innerText="GO";
+}
+else{
+clearInterval(timer);
+c.innerText="";
+running=true;
+gameLoop();
+}
+
+},1000);
+
+}
+
+function restartGame(){
+
+running=false;
+
+panel.style.display="block";
+
+init();
+
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+}
+
+function changeDirection(e){
+
+let key=e.key.toLowerCase();
+
+if((key==="arrowleft"||key==="a") && dx===0){
+dx=-grid; dy=0;
+}
+
+else if((key==="arrowright"||key==="d") && dx===0){
+dx=grid; dy=0;
+}
+
+else if((key==="arrowup"||key==="w") && dy===0){
+dx=0; dy=-grid;
+}
+
+else if((key==="arrowdown"||key==="s") && dy===0){
+dx=0; dy=grid;
+}
+
+}
+
+function gameLoop(){
+
+if(!running) return;
+
+setTimeout(()=>{
+
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+const head={
+x:snake[0].x+dx,
+y:snake[0].y+dy
+};
+
+snake.unshift(head);
+
+if(head.x===food.x && head.y===food.y){
+
+score++;
+updateScore();
+
+spawnFood();
+
+}else{
+snake.pop();
+}
+
+ctx.fillStyle="red";
+ctx.fillRect(food.x,food.y,grid,grid);
+
+ctx.fillStyle="lime";
+
+snake.forEach(part=>{
+ctx.fillRect(part.x,part.y,grid-2,grid-2);
+});
+
+if(checkCollision(head)){
+
+running=false;
+
+saveScore(score);
+
+updateScoreList();
+
+panel.style.display="block";
+
+alert("Game Over! Score: "+score);
+
+return;
+}
+
+gameLoop();
+
+},speed);
+
+}
+
+function checkCollision(head){
+
+if(head.x<0 || head.x>=canvas.width || head.y<0 || head.y>=canvas.height)
+return true;
+
+for(let i=1;i<snake.length;i++){
+if(head.x===snake[i].x && head.y===snake[i].y)
+return true;
+}
+
+return false;
+
+}
+
+updateScoreList();
+init();
+
+</script>
+
+</body>
+</html>
