@@ -2,6 +2,9 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Snake Game</title>
 
 <style>
@@ -12,13 +15,15 @@ overflow:hidden;
 background:#111;
 font-family:Arial;
 color:white;
+touch-action:none;
 }
 
 canvas{
 display:block;
 margin:auto;
 background:black;
-border:3px solid lime;
+max-width:95vw;
+max-height:95vh;
 }
 
 #panel{
@@ -105,6 +110,7 @@ background:white;
 <button onclick="startGame()">Start</button>
 <button onclick="restartGame()">Restart</button>
 <button onclick="toggleMode()">Light / Dark</button>
+<button onclick="clearScores()">Clear Scores</button>
 
 <div id="bestScore"></div>
 <div id="history"></div>
@@ -117,6 +123,26 @@ background:white;
 <canvas id="game"></canvas>
 
 <script>
+
+function isMobile(){
+return /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+}
+
+function enterFullscreen(){
+
+let elem=document.documentElement;
+
+if(elem.requestFullscreen){
+elem.requestFullscreen();
+}
+else if(elem.webkitRequestFullscreen){
+elem.webkitRequestFullscreen();
+}
+else if(elem.msRequestFullscreen){
+elem.msRequestFullscreen();
+}
+
+}
 
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
@@ -136,6 +162,60 @@ let running=false;
 const panel=document.getElementById("panel");
 
 document.addEventListener("keydown",changeDirection);
+
+/* TOUCH CONTROLS FOR PHONE */
+
+let touchStartX=0;
+let touchStartY=0;
+let swipeTriggered=false;
+
+document.addEventListener("touchstart",e=>{
+let t=e.touches[0];
+touchStartX=t.clientX;
+touchStartY=t.clientY;
+swipeTriggered=false;
+});
+
+document.addEventListener("touchmove",e=>{
+
+if(swipeTriggered) return;
+
+let t=e.touches[0];
+
+let dxSwipe=t.clientX-touchStartX;
+let dySwipe=t.clientY-touchStartY;
+
+if(Math.abs(dxSwipe)<20 && Math.abs(dySwipe)<20) return;
+
+swipeTriggered=true;
+
+if(Math.abs(dxSwipe)>Math.abs(dySwipe)){
+
+if(dxSwipe>0 && dx!==-grid){
+nextDx=grid;
+nextDy=0;
+}
+
+if(dxSwipe<0 && dx!==grid){
+nextDx=-grid;
+nextDy=0;
+}
+
+}else{
+
+if(dySwipe>0 && dy!==-grid){
+nextDx=0;
+nextDy=grid;
+}
+
+if(dySwipe<0 && dy!==grid){
+nextDx=0;
+nextDy=-grid;
+}
+
+}
+
+});
 
 /* random delay for bonus */
 
@@ -166,16 +246,45 @@ localStorage.setItem("snake_scores",JSON.stringify(scoreHistory));
 function updateScoreList(){
 
 let history=document.getElementById("history");
-history.innerHTML="<b>Recent Scores</b><br>";
+history.innerHTML="<b>Leaderboard</b><br>";
 
-let best=0;
+if(scoreHistory.length===0){
+history.innerHTML+="No scores yet";
+document.getElementById("bestScore").innerText="Best Score: 0";
+return;
+}
 
-scoreHistory.forEach(s=>{
-history.innerHTML+=s.score+" — "+s.time+"<br>";
-if(s.score>best) best=s.score;
-});
+/* sort scores highest first */
+
+let sorted=[...scoreHistory].sort((a,b)=>b.score-a.score);
+
+let best=sorted[0].score;
 
 document.getElementById("bestScore").innerText="Best Score: "+best;
+
+/* display leaderboard */
+
+sorted.forEach((s,i)=>{
+
+let rank="#"+(i+1);
+let star=s.score===best?" ⭐ BEST":"";
+
+let color=s.score===best?"style='color:gold;font-weight:bold'":"";
+
+history.innerHTML+=`<div ${color}>${rank} ${s.score} pts${star} — ${s.time}</div>`;
+
+});
+
+}
+
+function clearScores(){
+
+if(!confirm("Clear all score history and best score?")) return;
+
+scoreHistory=[];
+localStorage.removeItem("snake_scores");
+
+updateScoreList();
 
 }
 
@@ -253,6 +362,10 @@ document.getElementById("scoreBox").innerText="Score: "+score;
 
 function startGame(){
 
+if(isMobile()){
+enterFullscreen();
+}
+
 if(running) return;
 
 speed=parseInt(document.getElementById("speed").value);
@@ -325,6 +438,10 @@ dx=nextDx;
 dy=nextDy;
 
 ctx.clearRect(0,0,canvas.width,canvas.height);
+
+ctx.strokeStyle="lime";
+ctx.lineWidth=4;
+ctx.strokeRect(0,0,canvas.width,canvas.height);
 
 const head={x:snake[0].x+dx,y:snake[0].y+dy};
 
